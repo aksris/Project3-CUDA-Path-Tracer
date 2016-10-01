@@ -75,6 +75,7 @@ enum MaterialShadingTechnique {
 // 1) color contribution computation
 // 2) BSDF evaluation: generate a new ray
 struct ShadeableIntersection {
+  glm::vec3 intersectPoint;
   float t;
   glm::vec3 surfaceNormal;
   int materialId;
