@@ -143,7 +143,11 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 	}
 }
 
-__global__ void pathTraceOneBounce(
+// TODO:
+// computeIntersections handles generating ray intersections ONLY.
+// Generating new rays is handled in your shader(s).
+// Feel free to modify the code below.
+__global__ void computeIntersections(
 	int depth
 	, int num_paths
 	, PathSegment * pathSegments
@@ -184,8 +188,8 @@ __global__ void pathTraceOneBounce(
 			}
 			// TODO: add more intersection tests here... triangle? metaball? CSG?
 
-      // Compute the minimum t from the intersection tests to determine what
-      // scene geometry object was hit first.
+			// Compute the minimum t from the intersection tests to determine what
+			// scene geometry object was hit first.
 			if (t > 0.0f && t_min > t)
 			{
 				t_min = t;
@@ -277,6 +281,8 @@ __global__ void shadeFakeMaterial (
     ShadeableIntersection intersection = shadeableIntersections[idx];
     if (intersection.t > 0.0f) { // if the intersection exists...
       // Set up the RNG
+      // LOOK: this is how you use thrust's RNG! Please look at
+      // makeSeededRandomEngine as well.
       thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, 0);
       thrust::uniform_real_distribution<float> u01(0, 1);
 
@@ -289,6 +295,7 @@ __global__ void shadeFakeMaterial (
       }
       // Otherwise, do some pseudo-lighting computation. This is actually more
       // like what you would expect from shading in a rasterizer like OpenGL.
+      // TODO: replace this! you should be able to start with basically a one-liner
       else {
         float lightTerm = glm::dot(intersection.surfaceNormal, glm::vec3(0.0f, 1.0f, 0.0f));
         pathSegments[idx].color *= (materialColor * lightTerm) * 0.3f + ((1.0f - intersection.t * 0.02f) * materialColor) * 0.7f;
@@ -383,7 +390,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 	// tracing
 	dim3 numblocksPathSegmentTracing = (num_paths + blockSize1d - 1) / blockSize1d;
-	pathTraceOneBounce <<<numblocksPathSegmentTracing, blockSize1d>>> (
+	computeIntersections <<<numblocksPathSegmentTracing, blockSize1d>>> (
 		depth
 		, num_paths
 		, dev_paths
