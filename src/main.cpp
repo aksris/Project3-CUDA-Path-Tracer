@@ -135,7 +135,8 @@ void runCuda() {
         // execute the kernel
         int frame = 0;
         pathtrace(pbo_dptr, frame, iteration);
-
+		if (iteration % 512 == 0) saveImage();
+		
         // unmap buffer object
         cudaGLUnmapBufferObject(pbo);
     } else {
@@ -144,6 +145,7 @@ void runCuda() {
         cudaDeviceReset();
         exit(EXIT_SUCCESS);
     }
+
 }
 
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
