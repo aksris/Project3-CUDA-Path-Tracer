@@ -179,13 +179,13 @@ void scatterRay(
 
 		float ior = m.indexOfRefraction;
 		//normal vs ray dir
-		float costheta = glm::dot(normal, pathSegment.ray.direction);
+		float CosTheta = glm::dot(normal, pathSegment.ray.direction);
 		//change based on entering or exiting the refractive object
-		if (costheta < 0.f) ior = 1.f / ior;
+		if (CosTheta < 0.f) ior = 1.f / ior;
 
 		float R0 = powf((1 - ior) / (1 + ior), 2.f);
 		//schlicks coeff
-		float RTheta = R0 + (1 - R0) * powf((1.f - glm::abs(costheta)), 5.f);
+		float RTheta = R0 + (1 - R0) * powf((1.f - glm::abs(CosTheta)), 5.f);
 
 		if (RTheta < u01(rng))
 			pathSegment.ray.direction = glm::normalize(glm::refract(pathSegment.ray.direction, normal, ior));
@@ -199,6 +199,6 @@ void scatterRay(
 		//pathSegment.color *= glm::abs(glm::dot(normal, pathSegment.ray.direction));
 	}
 	pathSegment.color *= m.color * glm::abs(glm::dot(normal, pathSegment.ray.direction));
-	pathSegment.ray.origin = intersect + (EPSILON * pathSegment.ray.direction);
+	pathSegment.ray.origin = intersect + (1e-3f * pathSegment.ray.direction);
 	pathSegment.remainingBounces--;
 }

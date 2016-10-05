@@ -16,6 +16,7 @@
 #include "interactions.h"
 
 #define DOF 0
+#define CACHE_FIRSTBOUNCE 0
 
 #define ERRORCHECK 1
 
@@ -415,7 +416,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 		// tracing
 		dim3 numblocksPathSegmentTracing = (num_paths + blockSize1d - 1) / blockSize1d;
-		if ((iter == 1 && depth == 0) || depth > 0) {
+		if (CACHE_FIRSTBOUNCE && (iter == 1 && depth == 0) || depth > 0) {
 
 			computeIntersections << <numblocksPathSegmentTracing, blockSize1d >> > (
 				depth
@@ -427,10 +428,19 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 				);
 		}
 
-		if (iter == 1 && depth == 0) {
+		computeIntersections << <numblocksPathSegmentTracing, blockSize1d >> > (
+			depth
+			, num_paths
+			, dev_paths
+			, dev_geoms
+			, hst_scene->geoms.size()
+			, dev_intersections
+			);
+
+		if (CACHE_FIRSTBOUNCE && iter == 1 && depth == 0) {
 			cudaMemcpy(dev_intersections_cache, dev_intersections, pixelcount * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
 		}
-		else if (iter > 1 && depth == 0) {
+		else if (CACHE_FIRSTBOUNCE && iter > 1 && depth == 0) {
 			cudaMemcpy(dev_intersections, dev_intersections_cache, pixelcount * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
 		}
 
