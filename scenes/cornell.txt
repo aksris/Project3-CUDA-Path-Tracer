@@ -48,6 +48,36 @@ REFR        1
 REFRIOR     2.5
 EMITTANCE   0
 
+// Specular white
+MATERIAL 5
+RGB         .98 .98 .98
+SPECEX      0
+SPECRGB     .98 .98 .98
+REFL        1
+REFR        0
+REFRIOR     0
+EMITTANCE   0
+
+// microfacet white
+MATERIAL 6
+RGB         .4 0 .98
+SPECEX      3
+SPECRGB     0 0 0
+REFL        0
+REFR        0
+REFRIOR     0
+EMITTANCE   0
+
+// diffuse not white
+MATERIAL 7
+RGB         .4 0 .98
+SPECEX      0
+SPECRGB     .98 .98 .98
+REFL        0
+REFR        0
+REFRIOR     0
+EMITTANCE   0
+
 // Camera
 CAMERA
 RES         800 800
@@ -113,15 +143,23 @@ SCALE       .01 10 10
 // Sphere
 OBJECT 6
 sphere
-material 1
-TRANS       -1 4 2
+material 7
+TRANS       2 4 -1.5
 ROTAT       0 0 0
 SCALE       3 3 3
 
 // Sphere
 OBJECT 7
 sphere
-material 4
-TRANS       1 6 -2
+material 6
+TRANS       -2 4 -1.5
+ROTAT       0 0 0
+SCALE       3 3 3
+
+// Sphere
+OBJECT 8
+sphere
+material 0
+TRANS       0 2 4
 ROTAT       0 0 0
 SCALE       3 3 3

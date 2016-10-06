@@ -64,10 +64,10 @@ __host__ __device__ glm::ivec2 sampleStratified(int iter, int strata) {
 	return uv;
 }
 
-__host__ __device__ glm::ivec2 sampleHalton(int iter) {
-	glm::ivec2 uv(0);
-	uv.x = RadicalInverse(iter, 3);
-	uv.y = RadicalInverse(iter, 2);
+__host__ __device__ glm::vec2 sampleHalton(int iter) {
+	glm::vec2 uv(0);
+	uv.x = RadicalInverse(iter, 5);
+	uv.y = RadicalInverse(iter, 7);
 	return uv;
 }
 
@@ -96,15 +96,23 @@ __host__ __device__ glm::ivec2 sample02(int iter) {
 
 __host__ __device__
 glm::vec3 calculateRandomDirectionInHemispherexy(
-        glm::vec3 normal, thrust::default_random_engine &rng, int iter) {
+        glm::vec3 normal, int iter) {
+	
+	/*thrust::uniform_real_distribution<float> u01(0, 1);*/
 
-
-	glm::ivec2 xy = sampleHalton(iter);
+	glm::vec2 xy = sampleHalton(iter);
+	xy = glm::normalize(xy);
     thrust::uniform_real_distribution<float> u01(xy.x, xy.x+1);
 	thrust::uniform_real_distribution<float> u02(xy.y, xy.y+1);
 
-	float up = sqrt(xy.x); // cos(theta)
-	float over = sqrt(1 - up * up); // sin(theta)
+	float u, v;
+
+	u = TWO_PI * xy.x;
+	v = sqrt(1 - xy.y);
+
+
+	float up = sqrtf(xy.x); // cos(theta)
+	float over = sqrtf(1 - up * up); // sin(theta)
 	float around = xy.y * TWO_PI;
 
     // Find a direction that is not the normal based off of whether or not the
@@ -130,6 +138,57 @@ glm::vec3 calculateRandomDirectionInHemispherexy(
     return up * normal
         + cos(around) * over * perpendicularDirection1
         + sin(around) * over * perpendicularDirection2;
+}
+
+//__host__ __device__ glm::vec3 distribution_sample_wh(glm::vec3 wo, thrust::default_random_engine &rng) {
+//	glm::vec3 wh;
+//	thrust::uniform_real_distribution<float> u01(0, 1);
+//	glm::vec2 u(u01(rng), u01(rng));
+//	float cosTheta = 0, phi = (2 * M_PI) * u[1];
+//	if (alphax == alphay) {
+//		float tanTheta2 = alphax * alphax * u[0] / (1.0f - u[0]);
+//		cosTheta = 1 / std::sqrt(1 + tanTheta2);
+//	}
+//	else {
+//		phi =
+//			std::atan(alphay / alphax * std::tan(2 * M_PI * u[1] + .5f * Pi));
+//		if (u[1] > .5f) phi += Pi;
+//		float sinPhi = std::sin(phi), cosPhi = std::cos(phi);
+//		const float alphax2 = alphax * alphax, alphay2 = alphay * alphay;
+//		const float alpha2 =
+//			1 / (cosPhi * cosPhi / alphax2 + sinPhi * sinPhi / alphay2);
+//		float tanTheta2 = alpha2 * u[0] / (1 - u[0]);
+//		cosTheta = 1 / std::sqrt(1 + tanTheta2);
+//	}
+//	float sinTheta =
+//		std::sqrt(std::max((float)0., (float)1. - cosTheta * cosTheta));
+//	wh = SphericalDirection(sinTheta, cosTheta, phi);
+//	if (!SameHemisphere(wo, wh)) wh = -wh;
+//	return wh;
+//}
+
+__host__ __device__ float CosTheta(glm::vec3 wi, glm::vec3 n) {
+	return glm::dot(n, wi);
+}
+
+__host__ __device__ float SinTheta(glm::vec3 wi, glm::vec3 n) {
+	return sqrtf(glm::max(0.f, 1.f - CosTheta(wi, n) * CosTheta(wi, n)));
+}
+
+__host__ __device__ float CosPhi(glm::vec3 wi, glm::vec3 n) {
+	float sintheta = SinTheta(wi, n);
+	if (sintheta == 0.f) return 1.f;
+	return glm::clamp(wi.x / sintheta, -1.f, 1.f);
+}
+
+__host__ __device__ float SinPhi(glm::vec3 wi, glm::vec3 n) {
+	float sintheta = SinTheta(wi, n);
+	if (sintheta == 0.f) return 1.f;
+	return glm::clamp(wi.y / sintheta, -1.f, 1.f);
+}
+
+__host__ __device__ float AbsCosTheta(glm::vec3 wi, glm::vec3 n) {
+	return glm::abs(CosTheta(wi, n));
 }
 
 /**
@@ -194,8 +253,45 @@ void scatterRay(
 		
 		pathSegment.color *= m.specular.color;
 	}
+	else if (m.specular.exponent > 0.f) {
+		//microfacet sample_f
+		glm::vec3 wi = pathSegment.ray.direction;
+		//glm::vec3 wh = distribution_sample_wh(pathSegment.ray.direction, rng);
+		pathSegment.ray.direction = /*-pathSegment.ray.direction + 2 * glm::dot(pathSegment.ray.direction, wh) * wh*/glm::normalize(calculateRandomDirectionInHemisphere(normal, rng));
+		glm::vec3 wo = pathSegment.ray.direction;
+		float sinThetaI = SinTheta(wi, normal);
+		float sinThetaO = SinTheta(wo, normal);
+		// Compute cosine term of Oren-Nayar model
+		glm::vec3 tangent = glm::normalize(glm::cross(normal, wi));
+		float maxCos = 0;
+		if (sinThetaI > 1e-4 && sinThetaO > 1e-4) {
+			float sinPhiI = SinTheta(wi, tangent), cosPhiI = CosTheta(wi, tangent);
+			float sinPhiO = SinTheta(wo, tangent), cosPhiO = CosTheta(wo, tangent);
+			float dCos = cosPhiI * cosPhiO + sinPhiI * sinPhiO;
+			maxCos = glm::max(0.f, dCos);
+		}
+
+		// Compute sine and tangent terms of Oren-Nayar model
+		float sinAlpha, tanBeta;
+		if (AbsCosTheta(wi, normal) > AbsCosTheta(wo, normal)) {
+			sinAlpha = sinThetaO;
+			tanBeta = sinThetaI / AbsCosTheta(wi, normal);
+		}
+		else {
+			sinAlpha = sinThetaI;
+			tanBeta = sinThetaO / AbsCosTheta(wo, normal);
+		}
+		float sigma = glm::radians(300.f);
+		float A = 1.f - ((sigma*sigma) / (2.f *(sigma*sigma + 0.33f)));
+		float B = 0.45f * (sigma*sigma) / (sigma*sigma + 0.09f);
+		pathSegment.color *= (A + B * maxCos * sinAlpha * tanBeta);
+	}
 	else {
-		pathSegment.ray.direction = glm::normalize(calculateRandomDirectionInHemisphere(normal, rng));
+		/*if (depth == 0)
+			pathSegment.ray.direction = glm::normalize(calculateRandomDirectionInHemispherexy(normal, rng, iter));
+		else*/
+			pathSegment.ray.direction = glm::normalize(calculateRandomDirectionInHemispherexy(normal, iter));
+		//pathSegment.ray.direction = sample_wh(pathSegment.ray.direction
 		//pathSegment.color *= glm::abs(glm::dot(normal, pathSegment.ray.direction));
 	}
 	pathSegment.color *= m.color * glm::abs(glm::dot(normal, pathSegment.ray.direction));
