@@ -66,8 +66,8 @@ __host__ __device__ glm::ivec2 sampleStratified(int iter, int strata) {
 
 __host__ __device__ glm::vec2 sampleHalton(int iter) {
 	glm::vec2 uv(0);
-	uv.x = RadicalInverse(iter, 5);
-	uv.y = RadicalInverse(iter, 7);
+	uv.x = RadicalInverse(iter, 2);
+	uv.y = RadicalInverse(iter, 3);
 	return uv;
 }
 
@@ -89,14 +89,14 @@ __host__ __device__ float Sobol2(int n, int scramble) {
 
 __host__ __device__ glm::ivec2 sample02(int iter) {
 	glm::ivec2 uv(0);
-	uv.x = VanDerCorput(16, 1);
-	uv.y = Sobol2(16, 1);
+	uv.x = VanDerCorput(4, 1);
+	uv.y = Sobol2(4, 1);
 	return uv;
 }
 
 __host__ __device__
 glm::vec3 calculateRandomDirectionInHemispherexy(
-        glm::vec3 normal, int iter) {
+	glm::vec3 normal, thrust::default_random_engine &rng, int iter) {
 	
 	/*thrust::uniform_real_distribution<float> u01(0, 1);*/
 
@@ -110,11 +110,16 @@ glm::vec3 calculateRandomDirectionInHemispherexy(
 	u = TWO_PI * xy.x;
 	v = sqrt(1 - xy.y);
 
+	/*glm::vec3 ret;
+	ret.x = v * glm::cos(u);
+	ret.y = sqrtf(xy.y);
+	ret.z = v * glm::sin(u);
+	return ret;*/
 
 	float up = sqrtf(xy.x); // cos(theta)
 	float over = sqrtf(1 - up * up); // sin(theta)
 	float around = xy.y * TWO_PI;
-
+	
     // Find a direction that is not the normal based off of whether or not the
     // normal's components are all equal to sqrt(1/3) or whether or not at
     // least one component is less than sqrt(1/3). Learned this trick from
@@ -287,10 +292,10 @@ void scatterRay(
 		pathSegment.color *= (A + B * maxCos * sinAlpha * tanBeta);
 	}
 	else {
-		/*if (depth == 0)
+		if (depth <= -1)
 			pathSegment.ray.direction = glm::normalize(calculateRandomDirectionInHemispherexy(normal, rng, iter));
-		else*/
-			pathSegment.ray.direction = glm::normalize(calculateRandomDirectionInHemispherexy(normal, iter));
+		else
+			pathSegment.ray.direction = glm::normalize(calculateRandomDirectionInHemisphere(normal, rng));
 		//pathSegment.ray.direction = sample_wh(pathSegment.ray.direction
 		//pathSegment.color *= glm::abs(glm::dot(normal, pathSegment.ray.direction));
 	}

@@ -61,7 +61,7 @@ EMITTANCE   0
 // microfacet white
 MATERIAL 6
 RGB         .4 0 .98
-SPECEX      3
+SPECEX      0
 SPECRGB     0 0 0
 REFL        0
 REFR        0
