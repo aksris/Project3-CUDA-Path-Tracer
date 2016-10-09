@@ -95,30 +95,16 @@ __host__ __device__ glm::ivec2 sample02(int iter) {
 }
 
 __host__ __device__
-glm::vec3 calculateRandomDirectionInHemispherexy(
-	glm::vec3 normal, thrust::default_random_engine &rng, int iter) {
+glm::vec3 calculateRandomDirectionInHemisphereExponent(
+	glm::vec3 normal, thrust::default_random_engine &rng, float exponent) {
 	
-	/*thrust::uniform_real_distribution<float> u01(0, 1);*/
-
-	glm::vec2 xy = sampleHalton(iter);
-	xy = glm::normalize(xy);
-    thrust::uniform_real_distribution<float> u01(xy.x, xy.x+1);
-	thrust::uniform_real_distribution<float> u02(xy.y, xy.y+1);
-
-	float u, v;
-
-	u = TWO_PI * xy.x;
-	v = sqrt(1 - xy.y);
-
-	/*glm::vec3 ret;
-	ret.x = v * glm::cos(u);
-	ret.y = sqrtf(xy.y);
-	ret.z = v * glm::sin(u);
-	return ret;*/
-
-	float up = sqrtf(xy.x); // cos(theta)
-	float over = sqrtf(1 - up * up); // sin(theta)
-	float around = xy.y * TWO_PI;
+	thrust::uniform_real_distribution<float> u01(0, 1);
+	
+	float theta = glm::acos(powf(u01(rng), 1 / (exponent + 1)));
+	
+	float up = glm::cos(theta);
+	float over = glm::sin(theta);
+	float around = u01(rng) * TWO_PI;
 	
     // Find a direction that is not the normal based off of whether or not the
     // normal's components are all equal to sqrt(1/3) or whether or not at
@@ -144,33 +130,6 @@ glm::vec3 calculateRandomDirectionInHemispherexy(
         + cos(around) * over * perpendicularDirection1
         + sin(around) * over * perpendicularDirection2;
 }
-
-//__host__ __device__ glm::vec3 distribution_sample_wh(glm::vec3 wo, thrust::default_random_engine &rng) {
-//	glm::vec3 wh;
-//	thrust::uniform_real_distribution<float> u01(0, 1);
-//	glm::vec2 u(u01(rng), u01(rng));
-//	float cosTheta = 0, phi = (2 * M_PI) * u[1];
-//	if (alphax == alphay) {
-//		float tanTheta2 = alphax * alphax * u[0] / (1.0f - u[0]);
-//		cosTheta = 1 / std::sqrt(1 + tanTheta2);
-//	}
-//	else {
-//		phi =
-//			std::atan(alphay / alphax * std::tan(2 * M_PI * u[1] + .5f * Pi));
-//		if (u[1] > .5f) phi += Pi;
-//		float sinPhi = std::sin(phi), cosPhi = std::cos(phi);
-//		const float alphax2 = alphax * alphax, alphay2 = alphay * alphay;
-//		const float alpha2 =
-//			1 / (cosPhi * cosPhi / alphax2 + sinPhi * sinPhi / alphay2);
-//		float tanTheta2 = alpha2 * u[0] / (1 - u[0]);
-//		cosTheta = 1 / std::sqrt(1 + tanTheta2);
-//	}
-//	float sinTheta =
-//		std::sqrt(std::max((float)0., (float)1. - cosTheta * cosTheta));
-//	wh = SphericalDirection(sinTheta, cosTheta, phi);
-//	if (!SameHemisphere(wo, wh)) wh = -wh;
-//	return wh;
-//}
 
 __host__ __device__ float CosTheta(glm::vec3 wi, glm::vec3 n) {
 	return glm::dot(n, wi);
@@ -231,7 +190,7 @@ void scatterRay(
 		int iter,
 		int depth) {
 	thrust::uniform_real_distribution<float> u01(0, 1);
-    // TODO: implement this.
+    
     // A basic implementation of pure-diffuse shading will just call the
     // calculateRandomDirectionInHemisphere defined above.
 	if (m.hasReflective > 0.f) {
@@ -258,11 +217,11 @@ void scatterRay(
 		
 		pathSegment.color *= m.specular.color;
 	}
-	else if (m.specular.exponent > 0.f) {
+	else if (m.diffuseRoughness > 0.f ) {
 		//microfacet sample_f
 		glm::vec3 wi = pathSegment.ray.direction;
-		//glm::vec3 wh = distribution_sample_wh(pathSegment.ray.direction, rng);
-		pathSegment.ray.direction = /*-pathSegment.ray.direction + 2 * glm::dot(pathSegment.ray.direction, wh) * wh*/glm::normalize(calculateRandomDirectionInHemisphere(normal, rng));
+		
+		pathSegment.ray.direction = glm::normalize(calculateRandomDirectionInHemisphere(normal, rng));
 		glm::vec3 wo = pathSegment.ray.direction;
 		float sinThetaI = SinTheta(wi, normal);
 		float sinThetaO = SinTheta(wo, normal);
@@ -286,18 +245,18 @@ void scatterRay(
 			sinAlpha = sinThetaI;
 			tanBeta = sinThetaO / AbsCosTheta(wo, normal);
 		}
-		float sigma = glm::radians(300.f);
+		//roughness
+		float sigma = glm::radians(m.diffuseRoughness);
 		float A = 1.f - ((sigma*sigma) / (2.f *(sigma*sigma + 0.33f)));
 		float B = 0.45f * (sigma*sigma) / (sigma*sigma + 0.09f);
 		pathSegment.color *= (A + B * maxCos * sinAlpha * tanBeta);
 	}
+	else if (m.specular.exponent > 0.f) {
+		pathSegment.ray.direction = glm::normalize(calculateRandomDirectionInHemisphereExponent(normal, rng, m.specular.exponent));
+		pathSegment.color *= m.specular.color;
+	}
 	else {
-		if (depth <= -1)
-			pathSegment.ray.direction = glm::normalize(calculateRandomDirectionInHemispherexy(normal, rng, iter));
-		else
-			pathSegment.ray.direction = glm::normalize(calculateRandomDirectionInHemisphere(normal, rng));
-		//pathSegment.ray.direction = sample_wh(pathSegment.ray.direction
-		//pathSegment.color *= glm::abs(glm::dot(normal, pathSegment.ray.direction));
+		pathSegment.ray.direction = glm::normalize(calculateRandomDirectionInHemisphere(normal, rng));
 	}
 	pathSegment.color *= m.color * glm::abs(glm::dot(normal, pathSegment.ray.direction));
 	pathSegment.ray.origin = intersect + (1e-3f * pathSegment.ray.direction);

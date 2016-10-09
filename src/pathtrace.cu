@@ -17,6 +17,8 @@
 
 #define DOF 0
 #define CACHE_FIRSTBOUNCE 0
+#define MATERIAL_SORT 0
+#define ENABLE_AA 1
 
 #define ERRORCHECK 1
 
@@ -123,7 +125,7 @@ void pathtraceFree() {
   	cudaFree(dev_geoms);
   	cudaFree(dev_materials);
   	cudaFree(dev_intersections);
-    // TODO: clean up any extra device memory you created
+    
 	cudaFree(dev_materialIds1);
 	cudaFree(dev_materialIds2);
 	cudaFree(dev_intersections_cache);
@@ -171,13 +173,19 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 		thrust::uniform_real_distribution<float> u01(0, 1);
 		glm::vec2 jitter(u01(rng), u01(rng));
 
-		//stratified aa
-		int dx = 1.f / 16.f, dy = 1.f / 16.f;
 		float sx, sy;
-		sx = (float)x + ((iter % 16) + jitter.x) * dx;
-		sy = (float)y + ((iter % 16) + jitter.y) * dy;
+		if (ENABLE_AA){
+			//stratified aa
+			int dx = 1.f / 16.f, dy = 1.f / 16.f;
+			sx = (float)x + ((iter % 16) + jitter.x) * dx;
+			sy = (float)y + ((iter % 16) + jitter.y) * dy;
+		}
+		else{
+			sx = (float)x;
+			sy = (float)y;
 
-		// TODO: implement antialiasing by jittering the ray
+		}
+
 		segment.ray.direction = glm::normalize(
 			cam.view
 			- cam.right * cam.pixelLength.x * (sx - (float)cam.resolution.x * 0.5f)
@@ -201,7 +209,7 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 	}
 }
 
-// TODO:
+// 
 // computeIntersections handles generating ray intersections ONLY.
 // Generating new rays is handled in your shader(s).
 // Feel free to modify the code below.
@@ -427,15 +435,15 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 				, dev_intersections
 				);
 		}
-
-		computeIntersections << <numblocksPathSegmentTracing, blockSize1d >> > (
-			depth
-			, num_paths
-			, dev_paths
-			, dev_geoms
-			, hst_scene->geoms.size()
-			, dev_intersections
-			);
+		if (!CACHE_FIRSTBOUNCE)
+			computeIntersections << <numblocksPathSegmentTracing, blockSize1d >> > (
+				depth
+				, num_paths
+				, dev_paths
+				, dev_geoms
+				, hst_scene->geoms.size()
+				, dev_intersections
+				);
 
 		if (CACHE_FIRSTBOUNCE && iter == 1 && depth == 0) {
 			cudaMemcpy(dev_intersections_cache, dev_intersections, pixelcount * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
@@ -449,7 +457,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		depth++;
 
 
-		// TODO:
+		//
 		// --- Shading Stage ---
 		// Shade path segments based on intersections and generate new rays by
 		// evaluating the BSDF.
@@ -459,10 +467,12 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		// path segments that have been reshuffled to be contiguous in memory.
 
 		//need two different device variables
-		/*kernSetMaterialIds << <numblocksPathSegmentTracing, blockSize1d >> >(num_paths, dev_materialIds1, dev_materialIds2, dev_intersections);
-		checkCUDAError("set material ids");
-		thrust::sort_by_key(thrust::device, dev_materialIds1, dev_materialIds1 + num_paths, dev_paths);
-		thrust::sort_by_key(thrust::device, dev_materialIds2, dev_materialIds2 + num_paths, dev_intersections);*/
+		if (MATERIAL_SORT){
+			kernSetMaterialIds << <numblocksPathSegmentTracing, blockSize1d >> >(num_paths, dev_materialIds1, dev_materialIds2, dev_intersections);
+			checkCUDAError("set material ids");
+			thrust::sort_by_key(thrust::device, dev_materialIds1, dev_materialIds1 + num_paths, dev_paths);
+			thrust::sort_by_key(thrust::device, dev_materialIds2, dev_materialIds2 + num_paths, dev_intersections);
+		}
 
 		shadeMaterial << <numblocksPathSegmentTracing, blockSize1d >> > (
 			iter,
