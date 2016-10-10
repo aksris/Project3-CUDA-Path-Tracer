@@ -1,6 +1,7 @@
 #include "main.h"
 #include "preview.h"
 #include <cstring>
+#include <chrono>
 
 static std::string startTimeString;
 
@@ -134,8 +135,11 @@ void runCuda() {
 
         // execute the kernel
         int frame = 0;
+		auto begin = std::chrono::high_resolution_clock::now();
         pathtrace(pbo_dptr, frame, iteration);
-		if (iteration % 512 == 0) saveImage();
+		//if (iteration % 512 == 0) saveImage();
+		auto end = std::chrono::high_resolution_clock::now();
+		std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << " ms" << std::endl;
 		
         // unmap buffer object
         cudaGLUnmapBufferObject(pbo);

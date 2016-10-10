@@ -1,6 +1,7 @@
 #define _USE_MATH_DEFINES
 #include <cstdio>
 #include <cuda.h>
+#include <cuda_runtime.h>
 #include <cmath>
 #include <thrust/execution_policy.h>
 #include <thrust/random.h>
@@ -175,10 +176,9 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 
 		float sx, sy;
 		if (ENABLE_AA){
-			//stratified aa
-			int dx = 1.f / 16.f, dy = 1.f / 16.f;
-			sx = (float)x + ((iter % 16) + jitter.x) * dx;
-			sy = (float)y + ((iter % 16) + jitter.y) * dy;
+			//stochastic aa
+			sx = (float)x + jitter.x;
+			sy = (float)y + jitter.y;
 		}
 		else{
 			sx = (float)x;
@@ -404,7 +404,9 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	//   for you.
 
 	// TODO: perform one iteration of path tracing
-
+	cudaEvent_t start, stop;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
 	generateRayFromCamera << <blocksPerGrid2d, blockSize2d >> >(cam, iter, traceDepth, dev_paths);
 	checkCUDAError("generate camera ray");
 
@@ -415,13 +417,13 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 	// --- PathSegment Tracing Stage ---
 	// Shoot ray into scene, bounce between objects, push shading chunks
-
+	float computeMilliseconds = 0.f, time = 0.f, sortMilliseconds = 0.f;
 	bool iterationComplete = false;
 	while (!iterationComplete) {
 
 		// clean shading chunks
 		cudaMemset(dev_intersections, 0, pixelcount * sizeof(ShadeableIntersection));
-
+		cudaEventRecord(start);
 		// tracing
 		dim3 numblocksPathSegmentTracing = (num_paths + blockSize1d - 1) / blockSize1d;
 		if (CACHE_FIRSTBOUNCE && (iter == 1 && depth == 0) || depth > 0) {
@@ -455,7 +457,10 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		checkCUDAError("trace one bounce");
 		cudaDeviceSynchronize();
 		depth++;
-
+		cudaEventRecord(stop);
+		cudaEventSynchronize(stop);
+		cudaEventElapsedTime(&computeMilliseconds, start, stop);
+		time += computeMilliseconds;
 
 		//
 		// --- Shading Stage ---
@@ -468,10 +473,15 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 		//need two different device variables
 		if (MATERIAL_SORT){
+			cudaEventRecord(start);
 			kernSetMaterialIds << <numblocksPathSegmentTracing, blockSize1d >> >(num_paths, dev_materialIds1, dev_materialIds2, dev_intersections);
 			checkCUDAError("set material ids");
 			thrust::sort_by_key(thrust::device, dev_materialIds1, dev_materialIds1 + num_paths, dev_paths);
 			thrust::sort_by_key(thrust::device, dev_materialIds2, dev_materialIds2 + num_paths, dev_intersections);
+			cudaEventRecord(stop);
+			cudaEventSynchronize(stop);
+			cudaEventElapsedTime(&sortMilliseconds, start, stop);
+			time += sortMilliseconds;
 		}
 
 		shadeMaterial << <numblocksPathSegmentTracing, blockSize1d >> > (
@@ -497,7 +507,8 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 		iterationComplete = depth >= traceDepth || num_paths == 0;
 	}
-
+	std::cout << "compute intersection took: " << computeMilliseconds << " ms" << std::endl;
+	std::cout << "sort intersection took: " << computeMilliseconds << " ms" << std::endl;
 	///////////////////////////////////////////////////////////////////////////
 
 	// Send results to OpenGL buffer for rendering
