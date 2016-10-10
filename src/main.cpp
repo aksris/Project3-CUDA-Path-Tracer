@@ -140,7 +140,11 @@ void runCuda() {
 		//if (iteration % 512 == 0) saveImage();
 		auto end = std::chrono::high_resolution_clock::now();
 		std::cout << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << " ms" << std::endl;
-		
+		if (iteration == 128) {
+			pathtraceFree();
+			cudaDeviceReset();
+			exit(EXIT_SUCCESS);
+		}
         // unmap buffer object
         cudaGLUnmapBufferObject(pbo);
     } else {

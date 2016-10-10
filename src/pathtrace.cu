@@ -16,8 +16,8 @@
 #include "intersections.h"
 #include "interactions.h"
 
-#define DOF 0
-#define CACHE_FIRSTBOUNCE 0
+#define DOF 1
+#define CACHE_FIRSTBOUNCE 1
 #define MATERIAL_SORT 0
 #define ENABLE_AA 1
 
@@ -509,6 +509,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	}
 	std::cout << "compute intersection took: " << computeMilliseconds << " ms" << std::endl;
 	std::cout << "sort intersection took: " << computeMilliseconds << " ms" << std::endl;
+	std::cout << "total time: " << time << " ms" << std::endl;
 	///////////////////////////////////////////////////////////////////////////
 
 	// Send results to OpenGL buffer for rendering
