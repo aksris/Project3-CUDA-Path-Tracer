@@ -26,7 +26,7 @@ The above image indicates the total time spent in each device function with corr
 Analysis
 --------
 
-![](img/total_time.PNG)
+![](img/total_time.png)
 
 The above image shows a comparison of time taken in the `computeIntersection` function with different techniques
 - No caching first ray bounce
@@ -35,7 +35,7 @@ The above image shows a comparison of time taken in the `computeIntersection` fu
 
 The reason for a longer time for sorting could be that, there are not enough materials in the scene (and the scene is also not large enough. Maybe a scene as large as at least 1000 objects) that the rays show a significant change by sorting them by material.
 
-![](img/streamcompact.PNG)
+![](img/streamcompact.png)
 
 The above image shows a comparison of time taken with and without stream compaction. There is a significant change when `thrust::remove_if` is used to weed out rays that have finished bouncing in the scene i.e., rays that have `remainingBounces` 0 will be removed from the pool of "threads".
 
