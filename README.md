@@ -1,4 +1,4 @@
-CUDA Stream Compaction
+CUDA Path tracer
 ======================
 
 **University of Pennsylvania, CIS 565: GPU Programming and Architecture, Project 2**
